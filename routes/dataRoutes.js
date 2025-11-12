@@ -3,8 +3,6 @@ const router = express.Router();
 const Data = require("../models/dataModel");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
-const fs = require("fs");
-const path = require("path");
 
 // Cloudinary config
 cloudinary.config({
@@ -13,18 +11,8 @@ cloudinary.config({
   api_secret: process.env.API_SECRET,
 });
 
-// Multer temp storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, "../uploads");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + "-" + file.originalname);
-  },
-});
+// ✅ Use memory storage (no local file writes)
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 /* =============================
@@ -41,34 +29,49 @@ router.get("/", async (req, res) => {
 });
 
 /* =============================
-   ✅ POST NEW DATA
+   ✅ POST NEW DATA (Vercel safe)
 ============================= */
 router.post("/", upload.single("file"), async (req, res) => {
   try {
     let fileUrl = null;
     let fileType = null;
 
+    // ✅ Upload directly from memory
     if (req.file) {
-      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-        resource_type: "auto",
-        folder: "aone_uploads",
+      const uploadResult = await cloudinary.uploader.upload_stream(
+        { resource_type: "auto", folder: "aone_uploads" },
+        async (error, result) => {
+          if (error) {
+            console.error("❌ Cloudinary upload failed:", error);
+            return res.status(500).json({ message: "Cloudinary upload failed" });
+          }
+
+          // ✅ Save in DB
+          const newData = new Data({
+            title: req.body.title,
+            description: req.body.description,
+            type: req.file.mimetype.includes("pdf") ? "pdf" : "image",
+            fileUrl: result.secure_url,
+          });
+
+          const saved = await newData.save();
+          res.json(saved);
+        }
+      );
+
+      // ✅ Write stream to Cloudinary
+      uploadResult.end(req.file.buffer);
+    } else {
+      // No file case
+      const newData = new Data({
+        title: req.body.title,
+        description: req.body.description,
+        type: null,
+        fileUrl: null,
       });
-
-      fileUrl = uploadResult.secure_url;
-      fileType = req.file.mimetype.includes("pdf") ? "pdf" : "image";
-
-      fs.unlinkSync(req.file.path); // remove temp file
+      const saved = await newData.save();
+      res.json(saved);
     }
-
-    const newData = new Data({
-      title: req.body.title,
-      description: req.body.description,
-      type: fileType,
-      fileUrl: fileUrl,
-    });
-
-    const saved = await newData.save();
-    res.json(saved);
   } catch (err) {
     console.error("❌ Upload Error:", err);
     res.status(500).json({ message: err.message });
