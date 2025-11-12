@@ -1,23 +1,31 @@
 const express = require("express");
 const router = express.Router();
-const Data = require("../models/dataModel"); // make sure path is correct
+const Data = require("../models/dataModel");
 const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
+const fs = require("fs");
 
-// multer setup for file uploads
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.API_KEY,
+  api_secret: process.env.API_SECRET,
+});
+
+// multer setup for temp uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + "-" + file.originalname);
-  }
+  },
 });
 const upload = multer({ storage });
 
-// GET all data
+// ✅ GET all data
 router.get("/", async (req, res) => {
   try {
     const data = await Data.find();
-    console.log("Fetched data from DB:", data); // add this
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -25,17 +33,32 @@ router.get("/", async (req, res) => {
   }
 });
 
-
-// POST new data
+// ✅ POST new data (upload to Cloudinary)
 router.post("/", upload.single("file"), async (req, res) => {
-  console.log("Uploaded file:", req.file);
   try {
+    let fileUrl = null;
+    let fileType = null;
+
+    if (req.file) {
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        resource_type: "auto",
+        folder: "aone_uploads",
+      });
+
+      fileUrl = uploadResult.secure_url;
+      fileType = req.file.mimetype.includes("pdf") ? "pdf" : "image";
+
+      // remove local temp file
+      fs.unlinkSync(req.file.path);
+    }
+
     const newData = new Data({
       title: req.body.title,
       description: req.body.description,
-      type: req.file ? (req.file.mimetype.includes("pdf") ? "pdf" : "image") : null,
-      fileUrl: req.file ? `uploads/${req.file.filename}` : null
+      type: fileType,
+      fileUrl,
     });
+
     const saved = await newData.save();
     res.json(saved);
   } catch (err) {
@@ -44,35 +67,25 @@ router.post("/", upload.single("file"), async (req, res) => {
   }
 });
 
-
-// DELETE data
-router.delete("/:id", async (req, res) => {
-  try {
-    await Data.findByIdAndDelete(req.params.id);
-    res.json({ message: "Deleted successfully" });
-  } catch (err) {
-    console.error("DELETE /api/data error:", err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// PUT / update data
+// ✅ PUT / update data
 router.put("/:id", upload.single("file"), async (req, res) => {
   try {
     const data = await Data.findById(req.params.id);
     if (!data) return res.status(404).json({ message: "Data not found" });
 
-    // Safely get title and description from req.body
-    const title = req.body.title || data.title;
-    const description = req.body.description || data.description;
+    data.title = req.body.title || data.title;
+    data.description = req.body.description || data.description;
 
-    data.title = title;
-    data.description = description;
-
-    // Update file if new file uploaded
     if (req.file) {
-      data.fileUrl = `uploads/${req.file.filename}`;
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        resource_type: "auto",
+        folder: "aone_uploads",
+      });
+
+      data.fileUrl = uploadResult.secure_url;
       data.type = req.file.mimetype.includes("pdf") ? "pdf" : "image";
+
+      fs.unlinkSync(req.file.path);
     }
 
     const updated = await data.save();
@@ -83,5 +96,15 @@ router.put("/:id", upload.single("file"), async (req, res) => {
   }
 });
 
+// ✅ DELETE data
+router.delete("/:id", async (req, res) => {
+  try {
+    await Data.findByIdAndDelete(req.params.id);
+    res.json({ message: "Deleted successfully" });
+  } catch (err) {
+    console.error("DELETE /api/data error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 module.exports = router;
