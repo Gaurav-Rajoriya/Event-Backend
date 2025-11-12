@@ -3,15 +3,16 @@ const router = express.Router();
 const Data = require("../models/dataModel");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
+const streamifier = require("streamifier"); // 🧠 for converting buffer to stream
 
-// Cloudinary config
+// ✅ Cloudinary Config
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
   api_key: process.env.API_KEY,
   api_secret: process.env.API_SECRET,
 });
 
-// ✅ Use memory storage (no local file writes)
+// ✅ Use memory storage (no local writes)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
@@ -29,16 +30,16 @@ router.get("/", async (req, res) => {
 });
 
 /* =============================
-   ✅ POST NEW DATA (Vercel safe)
+   ✅ POST NEW DATA (with Memory Buffer)
 ============================= */
 router.post("/", upload.single("file"), async (req, res) => {
   try {
     let fileUrl = null;
     let fileType = null;
 
-    // ✅ Upload directly from memory
+    // ✅ If file is uploaded, push it to Cloudinary directly
     if (req.file) {
-      const uploadResult = await cloudinary.uploader.upload_stream(
+      const uploadStream = cloudinary.uploader.upload_stream(
         { resource_type: "auto", folder: "aone_uploads" },
         async (error, result) => {
           if (error) {
@@ -46,12 +47,15 @@ router.post("/", upload.single("file"), async (req, res) => {
             return res.status(500).json({ message: "Cloudinary upload failed" });
           }
 
-          // ✅ Save in DB
+          fileUrl = result.secure_url;
+          fileType = req.file.mimetype.includes("pdf") ? "pdf" : "image";
+
+          // ✅ Save data to MongoDB
           const newData = new Data({
             title: req.body.title,
             description: req.body.description,
-            type: req.file.mimetype.includes("pdf") ? "pdf" : "image",
-            fileUrl: result.secure_url,
+            type: fileType,
+            fileUrl: fileUrl,
           });
 
           const saved = await newData.save();
@@ -59,10 +63,10 @@ router.post("/", upload.single("file"), async (req, res) => {
         }
       );
 
-      // ✅ Write stream to Cloudinary
-      uploadResult.end(req.file.buffer);
+      // ✅ Convert buffer to stream and pipe to Cloudinary
+      streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
     } else {
-      // No file case
+      // ✅ No file case
       const newData = new Data({
         title: req.body.title,
         description: req.body.description,
@@ -79,7 +83,7 @@ router.post("/", upload.single("file"), async (req, res) => {
 });
 
 /* =============================
-   ✅ DELETE DATA BY ID
+   ✅ DELETE DATA
 ============================= */
 router.delete("/:id", async (req, res) => {
   try {
