@@ -10,18 +10,23 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static folder (optional)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Main API route
 app.use("/api/data", dataRoutes);
 
+// MongoDB Connection
 mongoose
   .connect(process.env.MONGO_URL)
   .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.log("❌ MongoDB Error:", err.message));
+  .catch((err) => console.error("❌ MongoDB Error:", err.message));
 
+// Default Route
 app.get("/", (req, res) => {
-  res.send("Aone Backend is live 🚀");
+  res.send("🚀 Aone Backend is Live!");
 });
 
-// ✅ For Vercel: export instead of listen
+// For Vercel (no app.listen)
 module.exports = app;

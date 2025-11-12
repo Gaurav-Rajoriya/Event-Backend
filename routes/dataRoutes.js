@@ -12,22 +12,18 @@ cloudinary.config({
   api_secret: process.env.API_SECRET,
 });
 
-// ✅ Multer memory storage (no local writes)
+// ✅ Multer memory storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// ✅ Helper function for Cloudinary Upload
+// ✅ Helper Function - Upload Buffer to Cloudinary
 const uploadToCloudinary = (buffer, folder = "aone_uploads") => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { resource_type: "auto", folder },
       (error, result) => {
-        if (error) {
-          console.error("Cloudinary Error:", error);
-          reject(error);
-        } else {
-          resolve(result);
-        }
+        if (error) reject(error);
+        else resolve(result);
       }
     );
     streamifier.createReadStream(buffer).pipe(stream);
@@ -56,7 +52,6 @@ router.post("/", upload.single("file"), async (req, res) => {
     let fileUrl = null;
     let fileType = null;
 
-    // 🔥 Upload to Cloudinary if file present
     if (req.file) {
       const result = await uploadToCloudinary(req.file.buffer);
       fileUrl = result.secure_url;
@@ -79,14 +74,13 @@ router.post("/", upload.single("file"), async (req, res) => {
 });
 
 /* =============================
-   ✅ UPDATE DATA BY ID
+   ✅ UPDATE DATA
 ============================= */
 router.put("/:id", upload.single("file"), async (req, res) => {
   try {
     const { title, description } = req.body;
     const updateFields = { title, description };
 
-    // ✅ Upload new file if exists
     if (req.file) {
       const result = await uploadToCloudinary(req.file.buffer);
       updateFields.fileUrl = result.secure_url;
