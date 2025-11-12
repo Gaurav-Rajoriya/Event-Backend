@@ -3,7 +3,7 @@ const router = express.Router();
 const Data = require("../models/dataModel");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
-const streamifier = require("streamifier"); // 🧠 for converting buffer to stream
+const streamifier = require("streamifier");
 
 // ✅ Cloudinary Config
 cloudinary.config({
@@ -12,9 +12,23 @@ cloudinary.config({
   api_secret: process.env.API_SECRET,
 });
 
-// ✅ Use memory storage (no local writes)
+// ✅ Multer memory storage (no local writes)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
+
+// ✅ Helper function: Upload buffer to Cloudinary (async wrapper)
+const uploadToCloudinary = (buffer, folder = "aone_uploads") => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: "auto", folder },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+};
 
 /* =============================
    ✅ GET ALL DATA
@@ -30,60 +44,70 @@ router.get("/", async (req, res) => {
 });
 
 /* =============================
-   ✅ POST NEW DATA (with Memory Buffer)
+   ✅ ADD NEW DATA
 ============================= */
 router.post("/", upload.single("file"), async (req, res) => {
   try {
+    const { title, description } = req.body;
+
+    if (!title || !description) {
+      return res.status(400).json({ message: "Title and Description required" });
+    }
+
     let fileUrl = null;
     let fileType = null;
 
-    // ✅ If file is uploaded, push it to Cloudinary directly
+    // 🧠 Upload to Cloudinary if file is provided
     if (req.file) {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: "auto", folder: "aone_uploads" },
-        async (error, result) => {
-          if (error) {
-            console.error("❌ Cloudinary upload failed:", error);
-            return res.status(500).json({ message: "Cloudinary upload failed" });
-          }
-
-          fileUrl = result.secure_url;
-          fileType = req.file.mimetype.includes("pdf") ? "pdf" : "image";
-
-          // ✅ Save data to MongoDB
-          const newData = new Data({
-            title: req.body.title,
-            description: req.body.description,
-            type: fileType,
-            fileUrl: fileUrl,
-          });
-
-          const saved = await newData.save();
-          res.json(saved);
-        }
-      );
-
-      // ✅ Convert buffer to stream and pipe to Cloudinary
-      streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
-    } else {
-      // ✅ No file case
-      const newData = new Data({
-        title: req.body.title,
-        description: req.body.description,
-        type: null,
-        fileUrl: null,
-      });
-      const saved = await newData.save();
-      res.json(saved);
+      const result = await uploadToCloudinary(req.file.buffer);
+      fileUrl = result.secure_url;
+      fileType = req.file.mimetype.includes("pdf") ? "pdf" : "image";
     }
+
+    const newData = new Data({
+      title,
+      description,
+      type: fileType,
+      fileUrl,
+    });
+
+    const saved = await newData.save();
+    res.json(saved);
   } catch (err) {
-    console.error("❌ Upload Error:", err);
+    console.error("❌ Add Error:", err);
     res.status(500).json({ message: err.message });
   }
 });
 
 /* =============================
-   ✅ DELETE DATA
+   ✅ UPDATE DATA BY ID
+============================= */
+router.put("/:id", upload.single("file"), async (req, res) => {
+  try {
+    const { title, description } = req.body;
+    const updateFields = { title, description };
+
+    // 🧠 If file uploaded, upload to Cloudinary
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer);
+      updateFields.fileUrl = result.secure_url;
+      updateFields.type = req.file.mimetype.includes("pdf") ? "pdf" : "image";
+    }
+
+    const updated = await Data.findByIdAndUpdate(req.params.id, updateFields, {
+      new: true,
+    });
+
+    if (!updated) return res.status(404).json({ message: "Item not found" });
+    res.json(updated);
+  } catch (err) {
+    console.error("❌ Update Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/* =============================
+   ✅ DELETE DATA BY ID
 ============================= */
 router.delete("/:id", async (req, res) => {
   try {
