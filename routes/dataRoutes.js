@@ -13,7 +13,7 @@ cloudinary.config({
   api_secret: process.env.API_SECRET,
 });
 
-// multer temp upload setup
+// Multer temp storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, "../uploads");
@@ -27,13 +27,27 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ✅ POST: Upload new data
+/* =============================
+   ✅ GET ALL DATA
+============================= */
+router.get("/", async (req, res) => {
+  try {
+    const data = await Data.find().sort({ createdAt: -1 });
+    res.json(data);
+  } catch (err) {
+    console.error("❌ Fetch Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/* =============================
+   ✅ POST NEW DATA
+============================= */
 router.post("/", upload.single("file"), async (req, res) => {
   try {
     let fileUrl = null;
     let fileType = null;
 
-    // 🔥 Important check — if file exists, upload to Cloudinary
     if (req.file) {
       const uploadResult = await cloudinary.uploader.upload(req.file.path, {
         resource_type: "auto",
@@ -43,8 +57,7 @@ router.post("/", upload.single("file"), async (req, res) => {
       fileUrl = uploadResult.secure_url;
       fileType = req.file.mimetype.includes("pdf") ? "pdf" : "image";
 
-      // Remove local temp file
-      fs.unlinkSync(req.file.path);
+      fs.unlinkSync(req.file.path); // remove temp file
     }
 
     const newData = new Data({
@@ -58,6 +71,19 @@ router.post("/", upload.single("file"), async (req, res) => {
     res.json(saved);
   } catch (err) {
     console.error("❌ Upload Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/* =============================
+   ✅ DELETE DATA BY ID
+============================= */
+router.delete("/:id", async (req, res) => {
+  try {
+    const deleted = await Data.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Item not found" });
+    res.json({ message: "Deleted successfully" });
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
