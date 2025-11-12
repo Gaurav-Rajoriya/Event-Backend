@@ -16,14 +16,18 @@ cloudinary.config({
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// ✅ Helper function: Upload buffer to Cloudinary (async wrapper)
+// ✅ Helper function for Cloudinary Upload
 const uploadToCloudinary = (buffer, folder = "aone_uploads") => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { resource_type: "auto", folder },
       (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
+        if (error) {
+          console.error("Cloudinary Error:", error);
+          reject(error);
+        } else {
+          resolve(result);
+        }
       }
     );
     streamifier.createReadStream(buffer).pipe(stream);
@@ -49,15 +53,10 @@ router.get("/", async (req, res) => {
 router.post("/", upload.single("file"), async (req, res) => {
   try {
     const { title, description } = req.body;
-
-    if (!title || !description) {
-      return res.status(400).json({ message: "Title and Description required" });
-    }
-
     let fileUrl = null;
     let fileType = null;
 
-    // 🧠 Upload to Cloudinary if file is provided
+    // 🔥 Upload to Cloudinary if file present
     if (req.file) {
       const result = await uploadToCloudinary(req.file.buffer);
       fileUrl = result.secure_url;
@@ -87,7 +86,7 @@ router.put("/:id", upload.single("file"), async (req, res) => {
     const { title, description } = req.body;
     const updateFields = { title, description };
 
-    // 🧠 If file uploaded, upload to Cloudinary
+    // ✅ Upload new file if exists
     if (req.file) {
       const result = await uploadToCloudinary(req.file.buffer);
       updateFields.fileUrl = result.secure_url;
@@ -107,7 +106,7 @@ router.put("/:id", upload.single("file"), async (req, res) => {
 });
 
 /* =============================
-   ✅ DELETE DATA BY ID
+   ✅ DELETE DATA
 ============================= */
 router.delete("/:id", async (req, res) => {
   try {
