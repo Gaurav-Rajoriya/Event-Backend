@@ -8,28 +8,25 @@ const dataRoutes = require("./routes/dataRoutes");
 dotenv.config();
 const app = express();
 
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-}));
+app.use(cors());
 app.use(express.json());
 
-// Serve static folder (optional)
+// Static folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Main API route
+// Main API routes
 app.use("/api/data", dataRoutes);
 
-// MongoDB Connection
+// MongoDB
 mongoose
   .connect(process.env.MONGO_URL)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB Error:", err.message));
 
-// Default Route
+// Default route
 app.get("/", (req, res) => {
   res.send("🚀 Aone Backend is Live!");
 });
 
-// For Vercel (no app.listen)
+// Export for Vercel
 module.exports = app;
