@@ -5,34 +5,44 @@ const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const streamifier = require("streamifier");
 
+// ================================
 // ✅ Cloudinary Config
+// ================================
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
   api_key: process.env.API_KEY,
   api_secret: process.env.API_SECRET,
 });
 
+// ================================
 // ✅ Multer memory storage
+// ================================
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// ✅ Helper Function - Upload Buffer to Cloudinary
-const uploadToCloudinary = (buffer, folder = "aone_uploads") => {
+// ================================
+// ✅ Upload Helper (Image + PDF)
+// ================================
+const uploadToCloudinary = (buffer, mimetype, folder = "aone_uploads") => {
   return new Promise((resolve, reject) => {
+    // PDF → raw | Images → image
+    const resourceType = mimetype.includes("pdf") ? "raw" : "image";
+
     const stream = cloudinary.uploader.upload_stream(
-      { resource_type: "auto", folder },
+      { resource_type: resourceType, folder },
       (error, result) => {
         if (error) reject(error);
         else resolve(result);
       }
     );
+
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
 
-/* =============================
-   ✅ GET ALL DATA
-============================= */
+// ================================
+// ✅ GET ALL DATA
+// ================================
 router.get("/", async (req, res) => {
   try {
     const data = await Data.find().sort({ createdAt: -1 });
@@ -43,17 +53,20 @@ router.get("/", async (req, res) => {
   }
 });
 
-/* =============================
-   ✅ ADD NEW DATA
-============================= */
+// ================================
+// ✅ ADD NEW DATA
+// ================================
 router.post("/", upload.single("file"), async (req, res) => {
   try {
     const { title, description } = req.body;
+
     let fileUrl = null;
     let fileType = null;
 
+    // If file exists → upload to Cloudinary
     if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer);
+      const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
+
       fileUrl = result.secure_url;
       fileType = req.file.mimetype.includes("pdf") ? "pdf" : "image";
     }
@@ -73,16 +86,19 @@ router.post("/", upload.single("file"), async (req, res) => {
   }
 });
 
-/* =============================
-   ✅ UPDATE DATA
-============================= */
+// ================================
+// ✅ UPDATE DATA
+// ================================
 router.put("/:id", upload.single("file"), async (req, res) => {
   try {
     const { title, description } = req.body;
+
     const updateFields = { title, description };
 
+    // If file updated
     if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer);
+      const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
+
       updateFields.fileUrl = result.secure_url;
       updateFields.type = req.file.mimetype.includes("pdf") ? "pdf" : "image";
     }
@@ -92,6 +108,7 @@ router.put("/:id", upload.single("file"), async (req, res) => {
     });
 
     if (!updated) return res.status(404).json({ message: "Item not found" });
+
     res.json(updated);
   } catch (err) {
     console.error("❌ Update Error:", err);
@@ -99,15 +116,18 @@ router.put("/:id", upload.single("file"), async (req, res) => {
   }
 });
 
-/* =============================
-   ✅ DELETE DATA
-============================= */
+// ================================
+// ✅ DELETE DATA
+// ================================
 router.delete("/:id", async (req, res) => {
   try {
     const deleted = await Data.findByIdAndDelete(req.params.id);
+
     if (!deleted) return res.status(404).json({ message: "Item not found" });
+
     res.json({ message: "Deleted successfully" });
   } catch (err) {
+    console.error("❌ Delete Error:", err);
     res.status(500).json({ message: err.message });
   }
 });
