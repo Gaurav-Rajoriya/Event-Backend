@@ -62,14 +62,18 @@ router.post("/", upload.single("file"), async (req, res) => {
     let fileUrl = null;
     let fileType = null;
 
+    // If file exists → upload
     if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        req.file.mimetype
+      );
 
       let finalUrl = result.secure_url;
 
-      // Important: PDF should open in browser
+      // ✅ PDF browser-open fix
       if (req.file.mimetype.includes("pdf")) {
-        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_pdf/");
+        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_auto/");
       }
 
       fileUrl = finalUrl;
@@ -92,22 +96,24 @@ router.post("/", upload.single("file"), async (req, res) => {
 });
 
 // ================================
-// ✅ UPDATE DATA (PDF fix added)
+// ✅ UPDATE DATA (PDF fix applied)
 // ================================
 router.put("/:id", upload.single("file"), async (req, res) => {
   try {
     const { title, description } = req.body;
-
     const updateFields = { title, description };
 
     if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        req.file.mimetype
+      );
 
       let finalUrl = result.secure_url;
 
-      // PDF open fix here also
+      // ✅ PDF browser-open fix
       if (req.file.mimetype.includes("pdf")) {
-        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_pdf/");
+        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_auto/");
       }
 
       updateFields.fileUrl = finalUrl;
