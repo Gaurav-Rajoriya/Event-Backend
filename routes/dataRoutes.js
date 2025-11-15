@@ -5,38 +5,24 @@ const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const streamifier = require("streamifier");
 
-/* ======================================
-   ✅ MUST BE FIRST: CORS FIX FOR VERCEL
-====================================== */
-router.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-/* ======================================
-   CLOUDINARY CONFIG
-====================================== */
+// ================================
+// ✅ Cloudinary Config
+// ================================
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
   api_key: process.env.API_KEY,
   api_secret: process.env.API_SECRET,
 });
 
-/* ======================================
-   MULTER MEMORY STORAGE
-====================================== */
+// ================================
+// ✅ Multer memory storage
+// ================================
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-/* ======================================
-   CLOUDINARY UPLOAD FUNCTION
-====================================== */
+// ================================
+// ✅ Upload Helper (Image + PDF)
+// ================================
 const uploadToCloudinary = (buffer, mimetype, folder = "aone_uploads") => {
   return new Promise((resolve, reject) => {
     const resourceType = mimetype.includes("pdf") ? "raw" : "image";
@@ -53,9 +39,9 @@ const uploadToCloudinary = (buffer, mimetype, folder = "aone_uploads") => {
   });
 };
 
-/* ======================================
-   GET ALL DATA
-====================================== */
+// ================================
+// ✅ GET ALL DATA
+// ================================
 router.get("/", async (req, res) => {
   try {
     const data = await Data.find().sort({ createdAt: -1 });
@@ -66,9 +52,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-/* ======================================
-   ADD NEW DATA
-====================================== */
+// ================================
+// ✅ ADD NEW DATA
+// ================================
 router.post("/", upload.single("file"), async (req, res) => {
   try {
     const { title, description } = req.body;
@@ -77,15 +63,13 @@ router.post("/", upload.single("file"), async (req, res) => {
     let fileType = null;
 
     if (req.file) {
-      const result = await uploadToCloudinary(
-        req.file.buffer,
-        req.file.mimetype
-      );
+      const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
 
       let finalUrl = result.secure_url;
 
+      // Important: PDF should open in browser
       if (req.file.mimetype.includes("pdf")) {
-        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_auto/");
+        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_pdf/");
       }
 
       fileUrl = finalUrl;
@@ -107,24 +91,23 @@ router.post("/", upload.single("file"), async (req, res) => {
   }
 });
 
-/* ======================================
-   UPDATE DATA
-====================================== */
+// ================================
+// ✅ UPDATE DATA (PDF fix added)
+// ================================
 router.put("/:id", upload.single("file"), async (req, res) => {
   try {
     const { title, description } = req.body;
+
     const updateFields = { title, description };
 
     if (req.file) {
-      const result = await uploadToCloudinary(
-        req.file.buffer,
-        req.file.mimetype
-      );
+      const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
 
       let finalUrl = result.secure_url;
 
+      // PDF open fix here also
       if (req.file.mimetype.includes("pdf")) {
-        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_auto/");
+        finalUrl = finalUrl.replace("/raw/upload/", "/image/upload/f_pdf/");
       }
 
       updateFields.fileUrl = finalUrl;
@@ -144,9 +127,9 @@ router.put("/:id", upload.single("file"), async (req, res) => {
   }
 });
 
-/* ======================================
-   DELETE DATA
-====================================== */
+// ================================
+// ✅ DELETE DATA
+// ================================
 router.delete("/:id", async (req, res) => {
   try {
     const deleted = await Data.findByIdAndDelete(req.params.id);
